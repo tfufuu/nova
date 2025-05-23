@@ -8,5 +8,15 @@ license.workspace = true
 [dependencies]
 novade-core = { path = "../novade-core" }
 novade-domain = { path = "../novade-domain" }
+thiserror = "1.0"
+sled = "0.34"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0" # Für Serialisierung der Entitäten
+async-trait = "0.1" # Für Trait-Implementierung mit async Methoden
+libc = "0.2" # Für pre_exec in Command unter Unix
 # Betriebssystem-, Hardware- und externe Dienst-spezifische Abhängigkeiten hier
 # z.B. tokio, dbus, pipewire, smithay etc.
+
+[dev-dependencies]
+tempfile = "3.3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
