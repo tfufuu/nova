@@ -36,14 +36,15 @@ pub type CoreResult<T> = Result<T, CoreError>;
 ///
 /// Jede Variante repräsentiert eine spezifische Fehlerbedingung. Die `#[error(...)]` Attribute
 /// von `thiserror` werden verwendet, um aussagekräftige Fehlermeldungen zu generieren.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone)]
 pub enum CoreError {
     /// Fehler beim Laden einer Konfigurationsdatei vom Dateisystem.
-    #[error("Konfiguration konnte nicht von Pfad '{path}' geladen werden: {source}")]
+    #[error("Konfiguration konnte nicht von Pfad '{path}' geladen werden: {error_message}")]
     ConfigLoadError {
         path: PathBuf,
-        #[source]
-        source: std::io::Error,
+        // std::io::Error ist nicht Clone, daher speichern wir die Nachricht.
+        // Das #[source] Attribut kann hier nicht direkt verwendet werden.
+        error_message: String, 
     },
 
     /// Fehler beim Parsen des Inhalts einer Konfigurationsdatei (z.B. ungültiges TOML).
@@ -55,10 +56,9 @@ pub enum CoreError {
     LoggingInitError(String),
 
     /// Ein allgemeiner Ein-/Ausgabe-Fehler ist aufgetreten.
-    ///
-    /// Diese Variante kann durch `#[from]` automatisch aus `std::io::Error` konvertiert werden.
+    /// Die ursprüngliche `std::io::Error` wird in einen String konvertiert, da `std::io::Error` nicht `Clone` ist.
     #[error("Ein E/A-Fehler ist aufgetreten: {0}")]
-    IoError(#[from] std::io::Error),
+    IoError(String), // Kein #[from] mehr, da wir manuell konvertieren müssen.
 
     /// Fehler bei der Serialisierung von Daten in ein bestimmtes Format (z.B. JSON, TOML).
     #[error("Fehler bei der Serialisierung von Daten (Format: {format}): {message}")]

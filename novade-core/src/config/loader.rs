@@ -63,7 +63,7 @@ where
 {
     let content = fs::read_to_string(path).map_err(|err| CoreError::ConfigLoadError {
         path: path.to_path_buf(), // Klone den Pfad für die Fehlerstruktur.
-        source: err,
+        error_message: err.to_string(), // .source zu .error_message und err.to_string()
     })?;
 
     toml::from_str(&content).map_err(|err| CoreError::ConfigParseError {
