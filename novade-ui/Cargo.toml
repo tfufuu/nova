@@ -1,0 +1,13 @@
+[package]
+name = "novade-ui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+novade-core = { path = "../novade-core" }
+novade-domain = { path = "../novade-domain" }
+novade-system = { path = "../novade-system" }
+# GTK4 und gtk4-rs Abhängigkeiten hier
+# gtk = { version = "0.7", package = "gtk4", features = ["gnome_44"] } # Beispiel
