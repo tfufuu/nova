@@ -7,4 +7,11 @@ license.workspace = true
 
 [dependencies]
 novade-core = { path = "../novade-core" }
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+async-trait = "0.1"
 # Weitere domänenspezifische Abhängigkeiten später hinzufügen
+
+[dev-dependencies]
+mockall = "0.11"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

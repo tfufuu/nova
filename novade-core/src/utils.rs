@@ -59,7 +59,7 @@
 
 use crate::error::{CoreError, CoreResult};
 use std::fs;
-use std::path::{Component, Path, PathBuf, MAIN_SEPARATOR}; // MAIN_SEPARATOR für Tests
+use std::path::{Component, Path, PathBuf}; // MAIN_SEPARATOR für Tests entfernt
 
 /// Löst einen möglicherweise relativen Pfad relativ zu einem gegebenen Basispfad auf und normalisiert ihn.
 ///
@@ -189,7 +189,7 @@ pub fn resolve_path(base_path: &Path, relative_path_str: &str) -> CoreResult<Pat
 /// }
 /// ```
 pub fn read_file_to_string(path: &Path) -> CoreResult<String> {
-    fs::read_to_string(path).map_err(CoreError::from)
+    fs::read_to_string(path).map_err(|err| CoreError::IoError(err.to_string()))
 }
 
 /// Ermittelt das Standard-Konfigurationsverzeichnis für die Anwendung gemäß den Konventionen des Betriebssystems.
