@@ -1,0 +1,10 @@
+[package]
+name = "novade-domain"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+novade-core = { path = "../novade-core" }
+# Weitere domänenspezifische Abhängigkeiten später hinzufügen

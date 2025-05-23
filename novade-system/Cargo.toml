@@ -1,0 +1,12 @@
+[package]
+name = "novade-system"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+novade-core = { path = "../novade-core" }
+novade-domain = { path = "../novade-domain" }
+# Betriebssystem-, Hardware- und externe Dienst-spezifische Abhängigkeiten hier
+# z.B. tokio, dbus, pipewire, smithay etc.

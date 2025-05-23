@@ -1,0 +1,18 @@
+[workspace]
+members = [
+    "novade-core",
+    "novade-domain",
+    "novade-system",
+    "novade-ui",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["NovaDE Developers"]
+license = "MIT OR Apache-2.0" # Beispiel, anpassen falls nötig
+
+[workspace.dependencies]
+# Hier könnten gemeinsame Abhängigkeiten für den gesamten Workspace definiert werden
+# z.B. log, anyhow, tokio etc.
+# Vorerst leer lassen, bis spezifische Abhängigkeiten für Kernmodule klar sind.
