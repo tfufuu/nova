@@ -1,6 +1,8 @@
 // src/compositor/core/window.rs
 use crate::input::InputEvent;
 // KeyState is used in process_event_queue, ensure crate::input::KeyState is used if not already.
+use crate::input::KeyState;
+
 
 /// Represents the different states a window can be in.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,7 +64,7 @@ impl Window {
     /// * `y` - Initial y-coordinate.
     pub fn new(
         id: u32,
-        client_id: u32, // New parameter
+        client_id: u32,
         title: String,
         width: u32,
         height: u32,
@@ -71,16 +73,16 @@ impl Window {
     ) -> Self {
         Self {
             id,
-            client_id, // Initialize new field
+            client_id,
             title,
-            width: if width == 0 { 100 } else { width }, // Ensure non-zero default
-            height: if height == 0 { 100 } else { height }, // Ensure non-zero default
+            width: if width == 0 { 100 } else { width },
+            height: if height == 0 { 100 } else { height },
             x,
             y,
             state: WindowState::Floating,
             app_id: None,
             focused: false,
-            is_mapped: false, // New field, initialized to false
+            is_mapped: false, // Initialized to false
             event_queue: Vec::new(),
         }
     }
@@ -91,37 +93,42 @@ impl Window {
     }
 
     /// Processes the pending input events for this window.
-    ///
-    /// This method iterates through the events in the window's queue,
-    /// simulates handling them by printing information, and clears the queue.
-    /// It includes a placeholder for specific key press actions.
-    /// The queue is cleared after processing.
     pub fn process_event_queue(&mut self) {
         let events_to_process = std::mem::take(&mut self.event_queue);
-
         if !events_to_process.is_empty() {
             println!("Window [ID: {}, ClientID: {}]: Processing {} events from queue.", self.id, self.client_id, events_to_process.len());
         }
-
         for event in events_to_process {
             println!("Window [ID: {}, ClientID: {}]: Received event: {:?}", self.id, self.client_id, event);
-            
-            // Optional placeholder for specific event handling
             match event {
-                InputEvent::Keyboard { key_code, state: crate::input::KeyState::Pressed, modifiers } => {
-                    // Example: 'X' key (e.g., key_code 88) with Ctrl to simulate close
-                    if key_code == 88 && modifiers.ctrl { // Assuming 88 is 'X'
+                InputEvent::Keyboard { key_code, state: KeyState::Pressed, modifiers } => { // Ensure KeyState is correctly pathed
+                    if key_code == 88 && modifiers.ctrl {
                         println!("Window [ID: {}, ClientID: {}]: Action: Would close (Ctrl+X received).", self.id, self.client_id);
-                    }
-                    // Example: 'F' key (e.g., key_code 70) to simulate fullscreen
-                    else if key_code == 70 {
+                    } else if key_code == 70 {
                          println!("Window [ID: {}, ClientID: {}]: Action: Would toggle fullscreen (F key received).", self.id, self.client_id);
                     }
                 }
-                _ => {
-                    // Other event types are just printed for now
-                }
+                _ => {}
             }
+        }
+    }
+
+    /// Marks the window as mapped (visible and interactable).
+    /// Typically called after the client has prepared the window content.
+    pub fn map(&mut self) {
+        if !self.is_mapped {
+            self.is_mapped = true;
+            println!("Window [ID: {}, ClientID: {}]: Mapped.", self.id, self.client_id);
+        }
+    }
+
+    /// Marks the window as unmapped (hidden and not interactable).
+    /// Unmapping also removes focus from the window.
+    pub fn unmap(&mut self) {
+        if self.is_mapped {
+            self.is_mapped = false;
+            self.focused = false; // Unmapping should also remove focus
+            println!("Window [ID: {}, ClientID: {}]: Unmapped.", self.id, self.client_id);
         }
     }
 }

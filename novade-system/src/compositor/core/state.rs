@@ -1,39 +1,27 @@
 // src/compositor/core/state.rs
 
 use crate::input::InputEvent;
-use super::display::Display; // Display is used in CompositorState::new()
 use super::output::Output;
+use super::window::{Window, WindowState}; // WindowState needs to be in scope
 use super::seat::Seat;
-use super::window::{Window, WindowState}; // Ensure WindowState is imported and used
+use super::display::Display;
+
 
 /// Manages the overall state of the Wayland compositor.
-///
-/// This struct holds all the core components like displays, outputs,
-/// windows, and seats, and provides methods to manage them.
-#[derive(Debug)] // Default derive removed, custom Default impl provided below
+#[derive(Debug)]
 pub struct CompositorState {
-    /// Indicates if the compositor is currently running.
     pub running: bool,
-    /// Represents the main display configuration.
     pub display: Display,
-    /// A list of all outputs (e.g., monitors).
     pub outputs: Vec<Output>,
-    /// A list of all windows managed by the compositor.
     pub windows: Vec<Window>,
-    /// A list of all seats (user input contexts).
     pub seats: Vec<Seat>,
-    /// Counter for the next available window ID.
     next_window_id: u32,
-    /// Counter for the next available output ID.
     next_output_id: u32,
 }
 
 impl CompositorState {
     /// Creates a new `CompositorState` with initial setup.
-    ///
-    /// Initializes with a default "seat0", a primary output (1920x1080 at 0,0),
-    /// and a secondary output (1280x720 at 1920,0).
-    /// `running` is set to true, and ID counters are initialized.
+    /// Initializes with a default "seat0" and multiple outputs.
     pub fn new() -> Self {
         let mut state = Self {
             running: true,
@@ -42,33 +30,22 @@ impl CompositorState {
             windows: Vec::new(),
             seats: vec![Seat::new("seat0".to_string())],
             next_window_id: 1,
-            next_output_id: 1, // Initialized to 1
+            next_output_id: 1,
         };
-
         // Add a primary output
-        let primary_output_id = state.next_output_id(); // Uses 1, increments counter to 2
+        let primary_output_id = state.next_output_id();
         state.add_output(Output::new(
             primary_output_id,
             "Primary-1920x1080".to_string(),
-            1920,
-            1080,
-            0,  // x position
-            0,  // y position
-            true, // is_primary
+            1920, 1080, 0, 0, true,
         ));
-
         // Add a secondary output
-        let secondary_output_id = state.next_output_id(); // Uses 2, increments counter to 3
+        let secondary_output_id = state.next_output_id();
         state.add_output(Output::new(
             secondary_output_id,
             "Secondary-1280x720".to_string(),
-            1280,
-            720,
-            1920, // x position (to the right of the primary)
-            0,    // y position (aligned at the top)
-            false, // is_primary
+            1280, 720, 1920, 0, false,
         ));
-        
         state
     }
 
@@ -80,15 +57,11 @@ impl CompositorState {
     }
 
     /// Adds a new output to the compositor state.
-    ///
-    /// The ID for the output should typically be generated using `next_output_id()`.
     pub fn add_output(&mut self, output: Output) {
         self.outputs.push(output);
     }
 
     /// Removes an output by its ID.
-    ///
-    /// Returns `true` if an output was removed, `false` otherwise.
     pub fn remove_output(&mut self, output_id: u32) -> bool {
         if let Some(index) = self.outputs.iter().position(|o| o.id == output_id) {
             self.outputs.remove(index);
@@ -106,15 +79,11 @@ impl CompositorState {
     }
 
     /// Adds a new window to the compositor state.
-    ///
-    /// The ID for the window should typically be generated using `next_window_id()`.
     pub fn add_window(&mut self, window: Window) {
         self.windows.push(window);
     }
 
     /// Removes a window by its ID.
-    ///
-    /// Returns `true` if a window was removed, `false` otherwise.
     pub fn remove_window(&mut self, window_id: u32) -> bool {
         if let Some(index) = self.windows.iter().position(|w| w.id == window_id) {
             self.windows.remove(index);
@@ -123,7 +92,7 @@ impl CompositorState {
             false
         }
     }
-
+    
     /// Finds a mutable reference to a window by its ID.
     pub fn find_window_mut(&mut self, window_id: u32) -> Option<&mut Window> {
         self.windows.iter_mut().find(|w| w.id == window_id)
@@ -134,168 +103,60 @@ impl CompositorState {
         self.windows.iter().find(|w| w.id == window_id)
     }
 
-    /// Sets the focused window for a specific seat.
+    /// Sets the focused window for a given seat.
     ///
-    /// If `window_id` is `Some`, the specified window will be marked as focused,
-    /// and all other windows will be marked as not focused.
-    /// If `window_id` is `None`, all windows will be marked as not focused.
-    /// Returns `true` if the seat was found and updated, `false` otherwise.
-    pub fn set_focused_window_for_seat(&mut self, seat_name: &str, window_id: Option<u32>) -> bool {
-        if let Some(seat) = self.seats.iter_mut().find(|s| s.name == seat_name) {
-            seat.focused_window = window_id;
-            if let Some(id) = window_id {
-                for window_mut in self.windows.iter_mut() {
-                    window_mut.focused = window_mut.id == id;
-                }
-            } else {
-                for window_mut in self.windows.iter_mut() {
-                    window_mut.focused = false;
-                }
-            }
-            true
-        } else {
-            false
-        }
-    }
-
-    /// Dispatches an input event to the appropriate window based on seat focus.
-    ///
-    /// # Arguments
-    ///
-    /// * `event` - The input event to dispatch.
-    /// * `seat_name` - The name of the seat from which the event originates.
-    ///
-    /// # Returns
-    ///
-    /// `true` if the event was successfully queued to a focused window,
-    /// `false` otherwise (e.g., seat not found, no window focused, or focused window not found).
-    pub fn dispatch_input_event(&mut self, event: &InputEvent, seat_name: &str) -> bool {
-        if let Some(seat) = self.seats.iter().find(|s| s.name == seat_name) {
-            if let Some(focused_window_id) = seat.focused_window {
-                if let Some(window) = self.windows.iter_mut().find(|w| w.id == focused_window_id) {
-                    window.queue_event(event.clone());
-                    return true;
-                }
-            }
-        }
-        false
-    }
-
-    /// Arranges all managed windows into a simple horizontal tiling layout on a selected output.
-    ///
-    /// It prioritizes the primary output. If no primary output exists, it uses the first available output.
-    /// If no outputs are defined, it defaults to a 1920x1080 virtual screen at (0,0).
-    /// Windows are tiled side-by-side, relative to the selected output's origin and dimensions.
-    /// All tiled windows will have their state set to `WindowState::Tiled`.
-    pub fn tile_windows(&mut self) {
-        let num_windows = self.windows.len();
-        if num_windows == 0 {
-            println!("CompositorState: No windows to tile.");
-            return;
-        }
-
-        // Determine the target output for tiling
-        let target_output = self.outputs.iter().find(|o| o.is_primary)
-            .or_else(|| self.outputs.first()); // Fallback to the first output if no primary
-
-        let (screen_x, screen_y, screen_width, screen_height) = match target_output {
-            Some(output) => {
-                println!("CompositorState: Tiling on output ID: {}, Name: '{}', Primary: {}", output.id, output.name, output.is_primary);
-                (output.x, output.y, output.width, output.height)
-            }
-            None => {
-                println!("CompositorState: No outputs found, tiling on default 1920x1080 screen at (0,0).");
-                (0, 0, 1920, 1080) // Default virtual screen
-            }
-        };
-
-        let window_width = screen_width / num_windows as u32;
-        let window_height = screen_height;
-
-        for (i, window) in self.windows.iter_mut().enumerate() {
-            window.x = screen_x + (i as u32 * window_width) as i32;
-            window.y = screen_y;
-            window.width = window_width;
-            window.height = window_height;
-            window.state = WindowState::Tiled;
-        }
-        println!("CompositorState: Windows tiled. Total: {}. On screen area: {}x{} at ({},{}). Each window: {}x{}",
-                 num_windows, screen_width, screen_height, screen_x, screen_y, window_width, window_height);
-    }
-
-    /// Changes focus to the next window in the list for the specified seat.
-    ///
-    /// If no window is currently focused, it focuses the first window.
-    /// If the last window is focused, it wraps around to the first window.
-    /// Handles cases with no windows or only one window.
+    /// Also updates the `focused` flag on the respective windows.
+    /// Only mapped windows can receive focus. If the target `window_id` is `None`,
+    /// or if it refers to an unmapped or non-existent window, focus is cleared for the seat.
     ///
     /// # Arguments
     /// * `seat_name` - The name of the seat to update focus for.
+    /// * `window_id` - Optional ID of the window to focus.
     ///
     /// # Returns
-    /// `true` if focus was changed or set, `false` if no windows exist or seat not found.
-    pub fn focus_next_window(&mut self, seat_name: &str) -> bool {
-        if self.windows.is_empty() {
-            println!("CompositorState: No windows to focus.");
-            return false;
-        }
+    /// `true` if the seat was found and focus processing was attempted (focus might be set or cleared).
+    /// `false` if the seat itself was not found.
+    pub fn set_focused_window_for_seat(&mut self, seat_name: &str, window_id: Option<u32>) -> bool {
+        if let Some(seat) = self.seats.iter_mut().find(|s| s.name == seat_name) {
+            let mut actual_focus_target_id: Option<u32> = None;
 
-        let seat_index = match self.seats.iter().position(|s| s.name == seat_name) {
-            Some(idx) => idx,
-            None => {
-                println!("CompositorState: Seat '{}' not found for focus change.", seat_name);
-                return false;
+            if let Some(id_to_focus) = window_id {
+                // Check if the window to focus exists and is mapped
+                if let Some(win_to_focus) = self.windows.iter().find(|w| w.id == id_to_focus) {
+                    if win_to_focus.is_mapped {
+                        actual_focus_target_id = Some(id_to_focus);
+                        println!("CompositorState: Setting focus for seat '{}' to window ID: {}.", seat_name, id_to_focus);
+                    } else {
+                        println!("CompositorState: Window ID {} cannot be focused on seat '{}' because it is not mapped. Clearing focus.", id_to_focus, seat_name);
+                    }
+                } else {
+                     println!("CompositorState: Window ID {} to focus on seat '{}' does not exist. Clearing focus.", id_to_focus, seat_name);
+                }
+            } else { // window_id is None, so clear focus
+                println!("CompositorState: Clearing focus for seat '{}'.", seat_name);
             }
-        };
-
-        let current_focused_id = self.seats[seat_index].focused_window;
-        let mut next_window_index = 0; 
-
-        if let Some(focused_id) = current_focused_id {
-            if let Some(current_idx) = self.windows.iter().position(|w| w.id == focused_id) {
-                next_window_index = (current_idx + 1) % self.windows.len();
+            
+            seat.focused_window = actual_focus_target_id;
+            for window in self.windows.iter_mut() {
+                window.focused = Some(window.id) == actual_focus_target_id;
             }
+            true // Seat was found and focus logic was processed
+        } else {
+            println!("CompositorState: Seat '{}' not found for focus operation.", seat_name);
+            false // Seat not found
         }
-        
-        for window in self.windows.iter_mut() {
-            window.focused = false;
-        }
-
-        if let Some(window_to_focus) = self.windows.get_mut(next_window_index) {
-            window_to_focus.focused = true;
-            self.seats[seat_index].focused_window = Some(window_to_focus.id);
-            println!("CompositorState: Focus changed on seat '{}' to window ID: {}", seat_name, window_to_focus.id);
-            return true;
-        }
-        
-        self.seats[seat_index].focused_window = None; 
-        println!("CompositorState: Could not set next focus on seat '{}'.", seat_name);
-        false
     }
 
     /// Resizes a specified window to new dimensions.
-    ///
-    /// # Arguments
-    /// * `window_id` - The ID of the window to resize.
-    /// * `new_width` - The new width for the window. Must be greater than 0.
-    /// * `new_height` - The new height for the window. Must be greater than 0.
-    ///
-    /// # Returns
-    /// `true` if the window was found and successfully resized, `false` otherwise
-    /// (e.g., window not found, or `new_width` or `new_height` is 0).
     pub fn resize_window(&mut self, window_id: u32, new_width: u32, new_height: u32) -> bool {
         if new_width == 0 || new_height == 0 {
             println!("CompositorState: Resize failed for window ID {} - new dimensions ({}, {}) cannot be zero.",
                      window_id, new_width, new_height);
             return false;
         }
-
         if let Some(window) = self.find_window_mut(window_id) {
             window.width = new_width;
             window.height = new_height;
-            // Optionally, update window state if resizing implies something (e.g., exiting tiled mode)
-            // For now, just resize. If it was tiled, it might look odd until retiled.
-            // window.state = WindowState::Floating; // Example if resize breaks tiling
             println!("CompositorState: Window ID {} resized to {}x{}", window_id, new_width, new_height);
             true
         } else {
@@ -305,20 +166,10 @@ impl CompositorState {
     }
 
     /// Moves a specified window to new coordinates.
-    ///
-    /// # Arguments
-    /// * `window_id` - The ID of the window to move.
-    /// * `new_x` - The new x-coordinate for the window's top-left corner.
-    /// * `new_y` - The new y-coordinate for the window's top-left corner.
-    ///
-    /// # Returns
-    /// `true` if the window was found and successfully moved, `false` otherwise.
     pub fn move_window(&mut self, window_id: u32, new_x: i32, new_y: i32) -> bool {
         if let Some(window) = self.find_window_mut(window_id) {
             window.x = new_x;
             window.y = new_y;
-            // Optionally, update window state if moving implies something
-            // window.state = WindowState::Floating; // Example if move breaks tiling
             println!("CompositorState: Window ID {} moved to ({}, {})", window_id, new_x, new_y);
             true
         } else {
@@ -326,14 +177,141 @@ impl CompositorState {
             false
         }
     }
+
+    /// Arranges all **mapped** windows into a simple horizontal tiling layout on a selected output.
+    ///
+    /// It prioritizes the primary output. If no primary output exists, it uses the first available output.
+    /// If no outputs are defined, it defaults to a 1920x1080 virtual screen at (0,0).
+    /// Windows are tiled side-by-side, relative to the selected output's origin and dimensions.
+    /// Only mapped windows are considered for tiling. Tiled windows have their state set to `WindowState::Tiled`.
+    pub fn tile_windows(&mut self) {
+        // Collect mutable references to mapped windows first.
+        let mut mapped_windows_refs: Vec<&mut Window> = self.windows.iter_mut().filter(|w| w.is_mapped).collect();
+        let num_mapped_windows = mapped_windows_refs.len();
+
+        if num_mapped_windows == 0 {
+            println!("CompositorState: No mapped windows to tile.");
+            return;
+        }
+
+        let target_output = self.outputs.iter().find(|o| o.is_primary)
+            .or_else(|| self.outputs.first());
+
+        let (screen_x, screen_y, screen_width, screen_height) = match target_output {
+            Some(output) => {
+                println!("CompositorState: Tiling on output ID: {}, Name: '{}', Primary: {}", output.id, output.name, output.is_primary);
+                (output.x, output.y, output.width, output.height)
+            }
+            None => {
+                println!("CompositorState: No outputs found, tiling on default 1920x1080 screen at (0,0).");
+                (0, 0, 1920, 1080)
+            }
+        };
+
+        let window_width = screen_width / num_mapped_windows as u32;
+        let window_height = screen_height;
+
+        for (i, window) in mapped_windows_refs.iter_mut().enumerate() {
+            window.x = screen_x + (i as u32 * window_width) as i32;
+            window.y = screen_y;
+            window.width = window_width;
+            window.height = window_height;
+            window.state = WindowState::Tiled;
+        }
+        println!("CompositorState: Mapped windows tiled. Total mapped: {}. On screen area: {}x{} at ({},{}). Each window: {}x{}",
+                 num_mapped_windows, screen_width, screen_height, screen_x, screen_y, window_width, window_height);
+    }
+
+    /// Changes focus to the next **mapped** window in the list for the specified seat.
+    ///
+    /// If no window is currently focused on the seat (or if the focused window became unmapped),
+    /// it focuses the first mapped window. If the last mapped window is focused, it wraps around
+    /// to the first mapped window. If no mapped windows exist, focus is cleared from the seat.
+    ///
+    /// # Arguments
+    /// * `seat_name` - The name of the seat to update focus for.
+    ///
+    /// # Returns
+    /// `true` if focus was successfully set to a mapped window or cleared because no mapped windows exist (and seat was found).
+    /// `false` if the seat was not found.
+    pub fn focus_next_window(&mut self, seat_name: &str) -> bool {
+        let mapped_window_ids: Vec<u32> = self.windows.iter()
+                                .filter(|w| w.is_mapped) // Corrected typo from 'зри'
+                                .map(|w| w.id)
+                                .collect();
+
+        if mapped_window_ids.is_empty() {
+            println!("CompositorState: No mapped windows to focus for seat '{}'.", seat_name);
+            // Attempt to clear focus on the specified seat.
+            // The return value of set_focused_window_for_seat indicates if the seat was found.
+            return self.set_focused_window_for_seat(seat_name, None);
+        }
+
+        // Find the seat. If not found, can't proceed.
+        let seat_exists = self.seats.iter().any(|s| s.name == seat_name);
+        if !seat_exists {
+            println!("CompositorState: Seat '{}' not found for focus change.", seat_name);
+            return false;
+        }
+        
+        let current_focused_id_on_seat = self.seats.iter()
+            .find(|s| s.name == seat_name)
+            .and_then(|s| s.focused_window);
+            
+        let mut next_focus_target_idx_in_mapped_list = 0; // Default to the first mapped window
+
+        if let Some(focused_id) = current_focused_id_on_seat {
+            // Find the position of the currently focused window within the list of *mapped* windows.
+            if let Some(current_mapped_idx) = mapped_window_ids.iter().position(|&id| id == focused_id) {
+                next_focus_target_idx_in_mapped_list = (current_mapped_idx + 1) % mapped_window_ids.len();
+            }
+            // If current_focused_id is not in mapped_window_ids (e.g., it got unmapped or was stale),
+            // next_focus_target_idx_in_mapped_list remains 0, effectively focusing the first *actually mapped* window.
+        }
+        // If current_focused_id_on_seat is None, next_focus_target_idx_in_mapped_list also remains 0.
+
+        let new_focused_window_id = mapped_window_ids[next_focus_target_idx_in_mapped_list];
+        
+        // set_focused_window_for_seat handles un-focusing others and setting the new focus.
+        // It also verifies that the target window (new_focused_window_id) is mapped.
+        // Since new_focused_window_id comes from mapped_window_ids, it is guaranteed to be mapped.
+        self.set_focused_window_for_seat(seat_name, Some(new_focused_window_id))
+    }
+
+    /// Dispatches an input event to the appropriate window based on seat focus.
+    ///
+    /// Events are only dispatched if the focused window is currently mapped.
+    ///
+    /// # Arguments
+    /// * `event` - The input event to dispatch.
+    /// * `seat_name` - The name of the seat from which the event originates.
+    ///
+    /// # Returns
+    /// `true` if the event was successfully queued to a focused and mapped window,
+    /// `false` otherwise (e.g., seat not found, no window focused, or focused window is not mapped).
+    pub fn dispatch_input_event(&mut self, event: &InputEvent, seat_name: &str) -> bool {
+        // Find the seat first (immutable borrow is fine for reading focused_window)
+        if let Some(seat_focused_window_id) = self.seats.iter()
+                                                 .find(|s| s.name == seat_name)
+                                                 .and_then(|s| s.focused_window) {
+            // Now find the mutable window only if it's the focused one AND it's mapped
+            if let Some(window) = self.windows.iter_mut()
+                                       .find(|w| w.id == seat_focused_window_id && w.is_mapped) {
+                window.queue_event(event.clone());
+                return true;
+            } else if self.windows.iter().any(|w| w.id == seat_focused_window_id && !w.is_mapped) {
+                // This case is for logging/debugging: the focused window exists but isn't mapped.
+                println!("CompositorState: Window ID {} is focused on seat '{}' but is not mapped. Event not dispatched.", seat_focused_window_id, seat_name);
+                return false;
+            }
+            // If window ID is stale (not found at all), it also correctly falls through to return false.
+        }
+        false
+    }
 }
 
-// Make sure Default calls the updated new()
 impl Default for CompositorState {
     fn default() -> Self {
         Self::new()
     }
 }
-
-// The erroneous #[cfg(test)] mod state_tests; line has been removed.
-// The correct declaration is in src/compositor/core/mod.rs.
