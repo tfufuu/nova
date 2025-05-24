@@ -1,0 +1,65 @@
+name: Rust CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build_and_test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal # Optional: Install a minimal toolchain
+          override: true
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v4 # Updated to v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build workspace
+        run: cargo build --workspace --exclude novade-system --exclude novade-ui
+        env:
+          CARGO_TERM_COLOR: always
+
+      - name: Run tests
+        run: cargo test --workspace --exclude novade-system --exclude novade-ui
+        env:
+          CARGO_TERM_COLOR: always
+
+  lint:
+    name: Lint (Clippy)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          components: clippy
+          profile: minimal
+          override: true
+
+      - name: Run Clippy
+        run: cargo clippy --workspace --exclude novade-system --exclude novade-ui -- -D warnings
+        env:
+          CARGO_TERM_COLOR: always
