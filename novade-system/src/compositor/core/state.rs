@@ -105,45 +105,46 @@ impl CompositorState {
 
     /// Sets the focused window for a given seat.
     ///
-    /// Also updates the `focused` flag on the respective windows.
-    /// Only mapped windows can receive focus. If the target `window_id` is `None`,
-    /// or if it refers to an unmapped or non-existent window, focus is cleared for the seat.
+    /// Also updates the `focused` flag on all windows. Only mapped windows can receive focus.
+    /// If `window_id` is `None`, or if it refers to an unmapped or non-existent window,
+    /// focus is cleared for the seat (set to `None`).
     ///
     /// # Arguments
     /// * `seat_name` - The name of the seat to update focus for.
     /// * `window_id` - Optional ID of the window to focus.
     ///
     /// # Returns
-    /// `true` if the seat was found and focus processing was attempted (focus might be set or cleared).
+    /// `true` if the seat was found and focus processing was attempted.
     /// `false` if the seat itself was not found.
     pub fn set_focused_window_for_seat(&mut self, seat_name: &str, window_id: Option<u32>) -> bool {
-        if let Some(seat) = self.seats.iter_mut().find(|s| s.name == seat_name) {
-            let mut actual_focus_target_id: Option<u32> = None;
+        let target_window_is_mapped_and_exists = match window_id {
+            Some(id) => self.windows.iter().find(|w| w.id == id).map_or(false, |w| w.is_mapped),
+            None => true, // Clearing focus is always "valid" in terms of window state
+        };
 
-            if let Some(id_to_focus) = window_id {
-                // Check if the window to focus exists and is mapped
-                if let Some(win_to_focus) = self.windows.iter().find(|w| w.id == id_to_focus) {
-                    if win_to_focus.is_mapped {
-                        actual_focus_target_id = Some(id_to_focus);
-                        println!("CompositorState: Setting focus for seat '{}' to window ID: {}.", seat_name, id_to_focus);
-                    } else {
-                        println!("CompositorState: Window ID {} cannot be focused on seat '{}' because it is not mapped. Clearing focus.", id_to_focus, seat_name);
-                    }
-                } else {
-                     println!("CompositorState: Window ID {} to focus on seat '{}' does not exist. Clearing focus.", id_to_focus, seat_name);
-                }
-            } else { // window_id is None, so clear focus
-                println!("CompositorState: Clearing focus for seat '{}'.", seat_name);
-            }
-            
-            seat.focused_window = actual_focus_target_id;
-            for window in self.windows.iter_mut() {
-                window.focused = Some(window.id) == actual_focus_target_id;
-            }
-            true // Seat was found and focus logic was processed
+        let final_window_id = if target_window_is_mapped_and_exists {
+            window_id
         } else {
-            println!("CompositorState: Seat '{}' not found for focus operation.", seat_name);
-            false // Seat not found
+            if window_id.is_some() { // Tried to focus an unmapped or non-existent window
+                 println!("CompositorState: Cannot focus window ID {:?} on seat '{}' (not found or not mapped). Clearing focus.", window_id.unwrap(), seat_name);
+            }
+            None // Clear focus
+        };
+        
+        if let Some(seat) = self.seats.iter_mut().find(|s| s.name == seat_name) {
+            seat.focused_window = final_window_id;
+            for window_to_update in self.windows.iter_mut() {
+                window_to_update.focused = Some(window_to_update.id) == final_window_id;
+            }
+            if let Some(id) = final_window_id {
+                println!("CompositorState: Seat '{}' focus set to window ID: {}", seat_name, id);
+            } else {
+                println!("CompositorState: Seat '{}' focus cleared.", seat_name);
+            }
+            true
+        } else {
+            println!("CompositorState: Seat '{}' not found for focus setting.", seat_name);
+            false
         }
     }
 
@@ -236,7 +237,7 @@ impl CompositorState {
     /// `false` if the seat was not found.
     pub fn focus_next_window(&mut self, seat_name: &str) -> bool {
         let mapped_window_ids: Vec<u32> = self.windows.iter()
-                                .filter(|w| w.is_mapped) // Corrected typo from 'зри'
+                                .filter(|w| w.is_mapped) // Corrected: 'filter' instead of 'зри'
                                 .map(|w| w.id)
                                 .collect();
 
@@ -278,7 +279,7 @@ impl CompositorState {
         self.set_focused_window_for_seat(seat_name, Some(new_focused_window_id))
     }
 
-    /// Dispatches an input event to the appropriate window based on seat focus.
+    /// Dispatches an input event to the appropriate **mapped** window based on seat focus.
     ///
     /// Events are only dispatched if the focused window is currently mapped.
     ///
