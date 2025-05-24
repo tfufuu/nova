@@ -1,12 +1,14 @@
 // src/lib.rs
 
 pub mod client; // Added client module
+pub mod clipboard;
 pub mod compositor;
 pub mod input;
 pub mod server;
 
 // Re-export key types
 pub use client::{Client, ClientRequest, ServerEvent}; // Added re-exports
+pub use clipboard::Clipboard;
 pub use server::Server;
 
 #[cfg(test)]

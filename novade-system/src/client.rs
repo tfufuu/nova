@@ -34,6 +34,19 @@ pub enum ClientRequest {
     // CloseWindow { client_id: u32, window_id: u32 },
     // MapWindow { client_id: u32, window_id: u32 },
     // UnmapWindow { client_id: u32, window_id: u32 },
+
+    /// Request to copy text to the clipboard.
+    CopyText {
+        /// The ID of the client making the request.
+        client_id: u32,
+        /// The text to copy.
+        text: String,
+    },
+    /// Request to paste text from the clipboard.
+    PasteTextRequest {
+        /// The ID of the client making the request.
+        client_id: u32,
+    },
 }
 
 /// Represents events that the server can send to clients (or use internally for now).
@@ -52,4 +65,17 @@ pub enum ServerEvent {
     // WindowClosed { window_id: u32 },
     // WindowMapped { window_id: u32 },
     // WindowUnmapped { window_id: u32 },
+
+    /// Indicates that text was successfully copied by a client.
+    TextCopied {
+        /// The ID of the client that copied the text.
+        client_id: u32,
+    },
+    /// Response to a paste request, containing the clipboard text.
+    PasteTextResponse {
+        /// The ID of the client that requested the paste.
+        client_id: u32,
+        /// The text from the clipboard, or None if empty.
+        text: Option<String>,
+    },
 }
