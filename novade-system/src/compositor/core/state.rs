@@ -42,11 +42,11 @@ impl CompositorState {
             windows: Vec::new(),
             seats: vec![Seat::new("seat0".to_string())],
             next_window_id: 1,
-            next_output_id: 1,
+            next_output_id: 1, // Initialized to 1
         };
 
         // Add a primary output
-        let primary_output_id = state.next_output_id();
+        let primary_output_id = state.next_output_id(); // Uses 1, increments counter to 2
         state.add_output(Output::new(
             primary_output_id,
             "Primary-1920x1080".to_string(),
@@ -58,7 +58,7 @@ impl CompositorState {
         ));
 
         // Add a secondary output
-        let secondary_output_id = state.next_output_id();
+        let secondary_output_id = state.next_output_id(); // Uses 2, increments counter to 3
         state.add_output(Output::new(
             secondary_output_id,
             "Secondary-1280x720".to_string(),
@@ -335,5 +335,5 @@ impl Default for CompositorState {
     }
 }
 
-#[cfg(test)]
-mod state_tests;
+// The erroneous #[cfg(test)] mod state_tests; line has been removed.
+// The correct declaration is in src/compositor/core/mod.rs.

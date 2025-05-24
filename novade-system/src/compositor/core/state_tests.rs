@@ -17,25 +17,50 @@ use crate::compositor::core::window::WindowState; // For asserting tiled state
 
 #[test]
 fn test_next_ids() {
-    let mut state = CompositorState::new();
-    assert_eq!(state.next_output_id(), 1);
-    assert_eq!(state.next_output_id(), 2);
-    assert_eq!(state.next_window_id(), 1);
-    assert_eq!(state.next_window_id(), 2);
+    // Let's adjust the expectation based on new() creating two outputs
+    let mut state_for_ids = CompositorState::new(); // Fresh state
+    assert_eq!(state_for_ids.outputs.len(), 2); // Confirm 2 outputs from new()
+    // The internal counter next_output_id is private. We test its effect via the public method.
+    // Initial state: output IDs 1 and 2 are used. So next_output_id() should start at 3.
+    assert_eq!(state_for_ids.next_output_id(), 3); // First call after new()
+    assert_eq!(state_for_ids.next_output_id(), 4); // Second call
+
+    let mut state_for_win_ids = CompositorState::new(); // Fresh state for window IDs
+    assert_eq!(state_for_win_ids.next_window_id(), 1);
+    assert_eq!(state_for_win_ids.next_window_id(), 2);
 }
 
 #[test]
 fn test_add_remove_output() {
     let mut state = CompositorState::new();
-    let output_id = state.next_output_id();
-    let output = Output::new(output_id, "test_output".to_string(), 1920, 1080, 0, 0);
-    state.add_output(output.clone());
-    assert_eq!(state.outputs.len(), 1);
-    assert_eq!(state.outputs[0].id, output_id);
-
-    assert!(state.remove_output(output_id));
+    // new() already adds 2 outputs. Clear them for a clean test of add/remove.
+    state.outputs.clear();
     assert_eq!(state.outputs.len(), 0);
-    assert!(!state.remove_output(output_id));
+    // We cannot directly reset state.next_output_id as it's private.
+    // The IDs will continue from where new() left off (e.g., 3, 4, ...). This is acceptable.
+    // Or, for truly isolated ID testing, new() would need to not add outputs by default,
+    // but that's a larger change. We'll work with continued IDs.
+
+    let output_id1 = state.next_output_id(); // Will be 3 if new() created 2 outputs
+    let output1 = Output::new(output_id1, "test_output1".to_string(), 1920, 1080, 0, 0, false);
+    state.add_output(output1.clone());
+    assert_eq!(state.outputs.len(), 1);
+    assert_eq!(state.outputs[0].id, output_id1);
+
+    let output_id2 = state.next_output_id(); // Will be 4
+    let output2 = Output::new(output_id2, "test_output2".to_string(), 1280, 720, 0, 0, false);
+    state.add_output(output2.clone());
+    assert_eq!(state.outputs.len(), 2);
+
+
+    assert!(state.remove_output(output_id1));
+    assert_eq!(state.outputs.len(), 1);
+    assert_eq!(state.outputs[0].id, output_id2); // Check remaining output
+
+    assert!(state.remove_output(output_id2));
+    assert_eq!(state.outputs.len(), 0);
+    assert!(!state.remove_output(output_id1)); // Try removing again
+    assert!(!state.remove_output(output_id2));
 }
 
 #[test]
@@ -187,6 +212,7 @@ fn test_dispatch_event_no_seats_at_all() { // Edge case, though new() creates on
 #[test]
 fn test_tile_windows_no_windows() {
     let mut state = CompositorState::new();
+    state.outputs.clear(); // Clear default outputs for this specific test
     state.tile_windows(); // Should not panic and do nothing.
     assert!(state.windows.is_empty());
 }
@@ -194,6 +220,7 @@ fn test_tile_windows_no_windows() {
 #[test]
 fn test_tile_windows_one_window_default_screen() {
     let mut state = CompositorState::new();
+    state.outputs.clear(); // Ensure tiling uses default screen, not default outputs
     let window_id = state.next_window_id();
     state.add_window(Window::new(window_id, "Win1".to_string(), 600, 400, 0, 0));
 
@@ -211,9 +238,9 @@ fn test_tile_windows_one_window_default_screen() {
 #[test]
 fn test_tile_windows_multiple_windows_with_output() {
     let mut state = CompositorState::new();
-    let output_id = state.next_output_id();
-    // Custom output dimensions
-    state.add_output(Output::new(output_id, "Output-1".to_string(), 1600, 900, 0, 0));
+    state.outputs.clear(); // Clear defaults to add a specific one
+    let output_id = state.next_output_id(); // ID will be 3
+    state.add_output(Output::new(output_id, "Output-1".to_string(), 1600, 900, 0, 0, true)); // Make it primary
 
     let win1_id = state.next_window_id();
     state.add_window(Window::new(win1_id, "Win1".to_string(), 100, 100, 0, 0));
@@ -399,4 +426,135 @@ fn test_move_window_non_existent() {
     let non_existent_window_id = state.next_window_id(); // Get an ID but don't add the window
 
     assert!(!state.move_window(non_existent_window_id, 50, 75), "Move of non-existent window should fail");
+}
+
+// --- Tests for multi-output logic ---
+
+#[test]
+fn test_compositor_state_new_initializes_outputs() {
+    let state = CompositorState::new();
+    assert_eq!(state.outputs.len(), 2, "Should initialize with two outputs by default");
+
+    let primary_output = state.outputs.iter().find(|o| o.is_primary);
+    assert!(primary_output.is_some(), "A primary output should exist");
+    if let Some(po) = primary_output {
+        assert_eq!(po.x, 0);
+        assert_eq!(po.y, 0);
+        assert_eq!(po.width, 1920);
+        assert_eq!(po.height, 1080);
+        assert_eq!(po.name, "Primary-1920x1080");
+    }
+
+    let secondary_output = state.outputs.iter().find(|o| !o.is_primary);
+    assert!(secondary_output.is_some(), "A secondary output should exist");
+    if let Some(so) = secondary_output {
+        assert_eq!(so.x, 1920);
+        assert_eq!(so.y, 0);
+        assert_eq!(so.width, 1280);
+        assert_eq!(so.height, 720);
+        assert_eq!(so.name, "Secondary-1280x720");
+    }
+}
+
+#[test]
+fn test_tile_windows_on_primary_output() {
+    let mut state = CompositorState::new(); // new() creates a primary and a secondary output
+    let win1_id = state.next_window_id();
+    state.add_window(Window::new(win1_id, "W1".to_string(), 10,10,0,0));
+    let win2_id = state.next_window_id();
+    state.add_window(Window::new(win2_id, "W2".to_string(), 10,10,0,0));
+
+    state.tile_windows(); // Should tile on the primary output (1920x1080 at 0,0)
+
+    let primary_output = state.outputs.iter().find(|o| o.is_primary).unwrap();
+    let expected_width = primary_output.width / 2;
+
+    let w1 = state.find_window(win1_id).unwrap();
+    assert_eq!(w1.x, primary_output.x);
+    assert_eq!(w1.y, primary_output.y);
+    assert_eq!(w1.width, expected_width);
+    assert_eq!(w1.height, primary_output.height);
+    assert_eq!(w1.state, WindowState::Tiled);
+
+    let w2 = state.find_window(win2_id).unwrap();
+    assert_eq!(w2.x, primary_output.x + expected_width as i32);
+    assert_eq!(w2.y, primary_output.y);
+    assert_eq!(w2.width, expected_width);
+    assert_eq!(w2.height, primary_output.height);
+    assert_eq!(w2.state, WindowState::Tiled);
+}
+
+#[test]
+fn test_tile_windows_on_first_output_if_no_primary() {
+    let mut state = CompositorState::new();
+    state.outputs.clear(); // Remove default outputs
+    // Do not reset state.next_output_id here, let it continue from where new() left off.
+    // This makes the test more robust to changes in new() regarding output ID generation.
+    let out1_id = state.next_output_id(); // e.g., 3
+    state.add_output(Output::new(out1_id, "OutputA-1000x600".to_string(), 1000, 600, 0, 0, false));
+    let out2_id = state.next_output_id(); // e.g., 4
+    state.add_output(Output::new(out2_id, "OutputB-800x500".to_string(), 800, 500, 1000, 0, false));
+
+
+    let win1_id = state.next_window_id();
+    state.add_window(Window::new(win1_id, "W1".to_string(), 10,10,0,0));
+
+    state.tile_windows(); // Should tile on "OutputA" as it's the first one
+
+    let first_output = &state.outputs[0]; // OutputA
+    assert_eq!(first_output.name, "OutputA-1000x600");
+
+    let w1 = state.find_window(win1_id).unwrap();
+    assert_eq!(w1.x, first_output.x);
+    assert_eq!(w1.y, first_output.y);
+    assert_eq!(w1.width, first_output.width); // Only one window, takes full width
+    assert_eq!(w1.height, first_output.height);
+    assert_eq!(w1.state, WindowState::Tiled);
+}
+
+#[test]
+fn test_tile_windows_with_no_outputs_uses_default_screen() {
+    let mut state = CompositorState::new();
+    state.outputs.clear(); // Ensure no outputs
+
+    let win1_id = state.next_window_id();
+    state.add_window(Window::new(win1_id, "W1".to_string(), 10,10,0,0));
+
+    state.tile_windows(); // Should use default 1920x1080 at (0,0)
+
+    let w1 = state.find_window(win1_id).unwrap();
+    assert_eq!(w1.x, 0); // Default screen x
+    assert_eq!(w1.y, 0); // Default screen y
+    assert_eq!(w1.width, 1920); // Default screen width
+    assert_eq!(w1.height, 1080); // Default screen height
+    assert_eq!(w1.state, WindowState::Tiled);
+}
+
+#[test]
+fn test_tile_windows_relative_to_output_origin() {
+    let mut state = CompositorState::new();
+    state.outputs.clear(); // Remove default outputs
+    // Let next_output_id continue from where new() left off.
+    let out_id = state.next_output_id(); // e.g., 3
+    state.add_output(Output::new(out_id, "OffsetOutput-1024x768".to_string(), 1024, 768, 500, 300, true));
+
+    let win1_id = state.next_window_id();
+    state.add_window(Window::new(win1_id, "W1".to_string(), 10,10,0,0));
+    let win2_id = state.next_window_id();
+    state.add_window(Window::new(win2_id, "W2".to_string(), 10,10,0,0));
+
+    state.tile_windows();
+
+    let target_output = state.outputs.iter().find(|o| o.is_primary).unwrap();
+    let expected_width = target_output.width / 2;
+
+    let w1 = state.find_window(win1_id).unwrap();
+    assert_eq!(w1.x, target_output.x); // X relative to output's X
+    assert_eq!(w1.y, target_output.y); // Y relative to output's Y
+    assert_eq!(w1.width, expected_width);
+    assert_eq!(w1.height, target_output.height);
+
+    let w2 = state.find_window(win2_id).unwrap();
+    assert_eq!(w2.x, target_output.x + expected_width as i32); // X relative to output's X
+    assert_eq!(w2.y, target_output.y);
 }
