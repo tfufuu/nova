@@ -100,4 +100,9 @@ pub enum InputEvent {
         /// The state of modifier keys at the time of the event.
         modifiers: Modifiers,
     },
+    // Clipboard shortcuts, processed by the server.
+    /// Ctrl+C was pressed.
+    CopyShortcut,
+    /// Ctrl+V was pressed.
+    PasteShortcut,
 }
